@@ -14,11 +14,11 @@ A task and engagement management tool for a CA / GST practice. Managers open **e
 
 | Layer | Choice | Notes |
 |---|---|---|
-| Frontend | Next.js 16 (App Router), TypeScript, Tailwind | Client-rendered pages. It never decides permissions: status buttons come from the API's `allowed_actions`. |
+| Frontend | Next.js 16 (App Router), TypeScript, Tailwind | Client-rendered pages. It never decides permissions: status buttons come from the API's `allowed_actions`. Covered by Playwright end-to-end tests. |
 | Backend | FastAPI, SQLAlchemy 2.0 (typed), Pydantic v2 | Python 3.13. Stateless, so it scales horizontally. |
 | Database | PostgreSQL 16 | The design depends on partial unique indexes, `ON CONFLICT`, CHECK constraints, JSONB and `COUNT(*) FILTER`. |
 | Auth | Email + password (bcrypt, cost 12), JWT HS256 access token (8h) | The role lives on the user row and is re-read from the DB on every request, so deactivating a user or changing their role takes effect immediately. |
-| Deployment | Vercel (web), Render (API, runs `alembic upgrade head` on start), Neon (Postgres) | GitHub Actions runs pytest against a Postgres service, then lint and build for the web app. |
+| Deployment | Vercel (web), Render (API, runs `alembic upgrade head` on start), Neon (Postgres) | GitHub Actions runs pytest against a Postgres service, lint and build for the web app, and the Playwright suite. |
 
 ## 2. Data model
 
@@ -125,7 +125,7 @@ app/
 - **Scheduler entry point.** `POST /admin/recurring/generate {as_of}` and `python -m app.cli generate-recurring --as-of …` find the latest engagement for each (client, recurring service) pair (`DISTINCT ON`). They create every missing period up to the one containing `as_of`, so a scheduler that was down for three days catches up.
 - **Duplicate prevention lives in the database.** The engagement row is inserted with `INSERT … ON CONFLICT (client_id, service_type_id, period_start) WHERE period_start IS NOT NULL DO NOTHING RETURNING id`. If no id comes back, the period already exists and the existing engagement is returned. Two concurrent callers cannot both win: the second one blocks on the first one's uncommitted index entry, then does nothing. A manual `POST /engagements` for an existing period returns 409 `DUPLICATE_ENGAGEMENT` with the existing id.
 - **Running it twice:** `generate-next` returns 201 `{created: true}` the first time and 200 `{created: false}` with the same engagement after that. The batch endpoint reports `created: []` and counts the pairs that are `already_existed`.
-- **Failing partway:** the engagement insert, all task inserts and their `CREATED` audit events are one transaction. If anything fails, all of it rolls back, so there is never an engagement without tasks. In the batch job, each engagement is its own transaction. One client's failure is reported in `failed[]` and does not undo the others, and re-running retries only what is still missing. The tests cover this by making the database reject the second task mid-insert.
+- **Failing partway:** the engagement insert, all task inserts and their `CREATED` audit events are one transaction. If anything fails, all of it rolls back, so there is never an engagement without tasks. In the batch job, each engagement is its own transaction. One client's failure is reported in `failed[]` and does not undo the others, and re-running retries only what is still missing: a pair's catch-up stops at its first failed period, so the next run resumes exactly there. The tests cover this by making the database reject the second task mid-insert.
 
 ## 6. Workflow enforcement
 
@@ -146,11 +146,15 @@ The task service runs the checks in a fixed order: **permission (403) → versio
 
 The same module exposes `allowed_actions(actor, task)`. The API returns it with every task, and the UI renders only those buttons.
 
-## 7. Tests (pytest, real PostgreSQL, schema built by running the Alembic migrations)
+## 7. Tests
+
+**Backend** (pytest, real PostgreSQL, schema built by running the Alembic migrations).
 
 The seven required cases: (1) a member cannot move, edit or read another member's task → 403; (2) a duplicate recurring engagement → 409, the raw DB insert is blocked by the unique index, and `generate-next` twice → same engagement, no new rows; (3) NOT_STARTED → COMPLETED and other illegal moves → 409; (4) manager approval → COMPLETED plus an audit event (actor, from/to, note), and the engagement auto-completes; (5) a manager or admin assigned to a task cannot approve it, but a designated reviewer can; (6) creation fails mid-way (the DB rejects the second task) → no engagement, tasks or events, including for `generate-next` and the batch job; (7) a stale version → 409, plus a true two-session race caught by the DB version check.
 
-Also covered: an exhaustive state × action matrix for the pure state machine; period arithmetic (month, FY quarter and FY year boundaries, catch-up); role-scoped visibility for lists, detail and dashboard; dashboard bucket counts; overdue and due-today filters; keyset pagination (no duplicates or gaps); login, inactive users and missing tokens; admin-only endpoints; GSTIN validation; clients in use cannot be deleted; template edits don't change existing tasks; reviewer ≠ assignee. **89 tests in total.**
+Also covered: an exhaustive state × action matrix for the pure state machine; period arithmetic (month, FY quarter and FY year boundaries, catch-up); role-scoped visibility for lists, detail and dashboard; dashboard bucket counts; overdue and due-today filters; keyset pagination (no duplicates or gaps); login, inactive users and missing tokens; admin-only endpoints; GSTIN validation; clients in use cannot be deleted; template edits don't change existing tasks; reviewer ≠ assignee. Also: a failed period in a catch-up run is retried on the next run, and passwords over 72 bytes are rejected with 422. **91 tests in total.**
+
+**End-to-end** (Playwright, 25 tests in `frontend/e2e/`). They drive the real UI against the real API and an isolated `engagement_e2e` database that is migrated and re-seeded on every run: sign-in and role-aware navigation, the member work cycle, approve / request changes / no self-approval, reassignment with audit history, duplicate periods and idempotent generation, admin CRUD, stale-version recovery and the phone layout. CI runs them as a separate job.
 
 ## 8. Production at 5 million tasks
 

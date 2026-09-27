@@ -3,9 +3,10 @@
 A task and engagement management tool for a CA / GST practice. Managers open client engagements, and tasks are generated from service templates. Members work those tasks through a review workflow, and recurring compliance work (for example, monthly GST) rolls forward idempotently.
 
 - **Backend:** FastAPI, SQLAlchemy 2.0, Alembic, Pydantic v2, PostgreSQL, JWT (bcrypt)
-- **Frontend:** Next.js 16 (App Router), TypeScript, Tailwind
-- **Tests:** 89 pytest tests against a real PostgreSQL database
-- **Design note:** [docs/DESIGN.md](docs/DESIGN.md) covers architecture, ERD, workflow, recurring generation, scaling and trade-offs
+- **Frontend:** Next.js 16 (App Router), TypeScript, Tailwind. The UI is branded "Ledgerline": warm-neutral design tokens, a task drawer with a workflow stepper and activity timeline, toasts, skeleton loaders, and tables that turn into cards on phones. Any task can be shared as a deep link: `/tasks?task=ID` opens its drawer
+- **Tests:** 91 pytest tests against a real PostgreSQL database, plus 25 Playwright end-to-end tests that drive the real UI and API
+- **Design note:** [docs/DESIGN.md](docs/DESIGN.md) ([PDF](docs/DESIGN.pdf)) covers architecture, ERD, workflow, recurring generation, scaling and trade-offs
+- **Project guide:** [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md) is a detailed walkthrough of the project
 
 | | URL |
 |---|---|
@@ -71,13 +72,28 @@ npm run dev
 
 ## Running tests
 
+There are two suites: **91 backend tests** (pytest) and **25 end-to-end tests** (Playwright).
+
 ```bash
 make test                       # or: cd backend && .venv/Scripts/python -m pytest -v
 ```
 
-Tests build the schema by running the Alembic migrations against `TEST_DATABASE_URL`, and truncate between tests. GitHub Actions runs the same suite against a Postgres service container on every push ([.github/workflows/ci.yml](.github/workflows/ci.yml)). The frontend is checked with `npm run lint && npm run build`.
+Backend tests build the schema by running the Alembic migrations against `TEST_DATABASE_URL`, and truncate between tests. The seven required scenarios are in [tests/test_workflow_rules.py](backend/tests/test_workflow_rules.py) and [tests/test_engagements.py](backend/tests/test_engagements.py) (search for `required test`).
 
-The seven required scenarios are in [tests/test_workflow_rules.py](backend/tests/test_workflow_rules.py) and [tests/test_engagements.py](backend/tests/test_engagements.py) (search for `required test`).
+GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs on every push: pytest against a Postgres service container, `npm run lint && npm run build` for the frontend, and the end-to-end suite.
+
+### End-to-end tests
+
+The Playwright specs in [frontend/e2e/](frontend/e2e) (`auth`, `member`, `manager`, `admin`, `resilience`) sign in as the seeded users and exercise the real UI against the real API: the member work cycle, review and self-approval rules, reassignment and audit history, duplicate-period and idempotent generation, admin CRUD, role-aware navigation, stale-version recovery and the phone layout.
+
+```bash
+createdb engagement_e2e          # once; docker compose creates it on a fresh volume (infra/init-test-db.sql)
+cd frontend
+npx playwright install chromium  # once
+npx playwright test              # add --ui for the interactive runner
+```
+
+[playwright.config.ts](frontend/playwright.config.ts) uses its own database, `engagement_e2e` (override with `E2E_DATABASE_URL`), so your dev data is untouched. It runs the migrations and `seed --reset`, starts the API on port 8001 (from `backend/.venv`) and Next.js dev on port 3001, and runs with one worker because the tests share the seeded database. Ports 8001 and 3001 must be free.
 
 ## API overview
 
@@ -111,8 +127,11 @@ backend/
   alembic/versions/0001_initial_schema.py
   tests/
 frontend/
-  app/(app)/        dashboard, tasks, engagements, admin/*
-  components/       TaskDrawer, TaskTable, AppShell, ui
+  app/(app)/        dashboard, tasks (?task=ID deep-links to a task), engagements, admin/*
+  app/globals.css   design tokens
+  components/       AppShell (role-aware nav, admin guard), TaskDrawer, TaskTable, toast, ui primitives
   lib/              api client, auth context, formatting
-docs/DESIGN.md
+  e2e/              Playwright specs
+docs/               DESIGN.md / DESIGN.pdf, PROJECT_GUIDE.md
+infra/              init-test-db.sql (creates engagement_test and engagement_e2e)
 ```
