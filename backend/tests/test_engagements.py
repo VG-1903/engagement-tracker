@@ -192,3 +192,27 @@ def test_task_list_pagination_and_filters(api, world, engagement, db):
     r = api.get("/tasks", headers=headers(world.alice), params={"status": "IN_PROGRESS"}).json()
     assert [t["status"] for t in r["items"]] == [TaskStatus.IN_PROGRESS.value]
     assert api.get("/tasks", headers=headers(world.alice), params={"cursor": "garbage!"}).status_code == 422
+
+
+def test_catch_up_stops_at_a_failed_period_so_a_rerun_fills_the_gap(world, engagement, db, monkeypatch):
+    """Aug exists; generating up to Oct must not create Oct if Sep failed, or Sep would never be retried."""
+    real, calls = engagement_service._build_task, {"n": 0}
+
+    def fail_first_period(*args, **kwargs):
+        calls["n"] += 1
+        task = real(*args, **kwargs)
+        if calls["n"] == 1:  # first task of the first missing period (Sep)
+            task.due_date = None
+        return task
+
+    monkeypatch.setattr(engagement_service, "_build_task", fail_first_period)
+    result = engagement_service.generate_due_recurring(db, as_of=date(2026, 10, 15))
+    assert result.created == [] and [f["period_start"] for f in result.failed] == ["2026-09-01"]
+    assert count(db, Engagement) == 1
+
+    monkeypatch.undo()
+    result = engagement_service.generate_due_recurring(db, as_of=date(2026, 10, 15))
+    assert len(result.created) == 2
+    db.expire_all()
+    assert db.scalars(select(Engagement.period_label).order_by(Engagement.period_start)).all() == [
+        "2026-08", "2026-09", "2026-10"]

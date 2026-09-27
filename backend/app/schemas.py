@@ -7,7 +7,7 @@ import re
 from datetime import date, datetime
 from typing import Annotated, Any, Generic, TypeVar
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints, field_validator, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field, StringConstraints, field_validator, model_validator
 
 from app.domain.workflow import Action
 from app.models import EngagementStatus, Recurrence, Role, TaskStatus
@@ -16,6 +16,14 @@ T = TypeVar("T")
 
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 Note = Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)]
+def _bcrypt_safe(v: str) -> str:
+    # bcrypt only uses the first 72 bytes and bcrypt>=5 rejects longer input outright.
+    if len(v.encode()) > 72:
+        raise ValueError("password must be at most 72 bytes")
+    return v
+
+
+NewPassword = Annotated[str, StringConstraints(min_length=8, max_length=72), AfterValidator(_bcrypt_safe)]
 GSTIN_RE = re.compile(r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$")
 
 
@@ -59,7 +67,7 @@ class UserOut(ORM):
 class UserCreate(BaseModel):
     name: Name
     email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
+    password: NewPassword
     role: Role
 
 
@@ -67,7 +75,7 @@ class UserUpdate(BaseModel):
     name: Name | None = None
     role: Role | None = None
     is_active: bool | None = None
-    password: str | None = Field(default=None, min_length=8, max_length=128)
+    password: NewPassword | None = None
 
 
 # ---------- clients ----------

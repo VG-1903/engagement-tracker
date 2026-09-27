@@ -241,10 +241,13 @@ def generate_due_recurring(db: Session, as_of: date | None = None, actor: User |
                     created.append(eid)
                 else:
                     already += 1
-            except Exception as exc:  # report and continue with the next client
+            except Exception as exc:  # report, then move on to the next client/service
                 log.exception("recurring_generation_failed")
                 failed.append({"client_id": client_id, "service_type_id": st.id, "period_start": str(p),
                                "error": str(exc)})
+                # Stop this pair here: creating later periods would make the next run start after the
+                # gap (it resumes from the latest engagement), so the failed period would never be retried.
+                break
     return GenerateDueOut(as_of=as_of, created=created, already_existed=already, failed=failed)
 
 

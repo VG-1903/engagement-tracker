@@ -107,3 +107,13 @@ def test_task_history_includes_assignment_changes(api, world, engagement):
               json={"assignee_id": world.bob.id, "due_date": "2026-12-31", "version": 1})
     actions = [e["action"] for e in api.get(f"/tasks/{t1}/history", headers=headers(world.bob)).json()]
     assert actions == ["CREATED", "ASSIGNED", "DUE_DATE_CHANGED"]
+
+
+def test_overlong_password_is_a_validation_error_not_a_crash(api, world):
+    body = {"name": "Long", "email": "long@example.com", "password": "x" * 73, "role": "MEMBER"}
+    r = api.post("/users", headers=headers(world.admin), json=body)
+    assert r.status_code == 422 and r.json()["error"]["code"] == "VALIDATION_ERROR"
+    r = api.post("/users", headers=headers(world.admin), json={**body, "password": "é" * 40})  # 80 bytes
+    assert r.status_code == 422
+    r = api.post("/auth/login", json={"email": "alice@example.com", "password": "x" * 100})
+    assert r.status_code == 401
