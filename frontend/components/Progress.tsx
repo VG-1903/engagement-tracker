@@ -1,38 +1,44 @@
 "use client";
 
 import type { EngagementSummary } from "@/lib/api";
-import { STATUS_LABEL } from "@/lib/format";
+import { STATUS_LABEL, STATUS_ORDER, STATUS_TONE } from "@/lib/format";
+import { cx } from "./ui";
 
-const BAR: Record<keyof typeof STATUS_LABEL, string> = {
-  COMPLETED: "bg-emerald-500",
-  READY_FOR_REVIEW: "bg-violet-400",
-  IN_PROGRESS: "bg-sky-400",
-  WAITING_FOR_CLIENT: "bg-amber-400",
-  CHANGES_REQUESTED: "bg-rose-400",
-  NOT_STARTED: "bg-slate-300",
-};
-
-export function Progress({ counts }: { counts: EngagementSummary["task_counts"] }) {
+export function Progress({ counts, wide = false }: { counts: EngagementSummary["task_counts"]; wide?: boolean }) {
   const total = Object.values(counts).reduce((a, b) => a + (b ?? 0), 0);
   const done = counts.COMPLETED ?? 0;
-  const order = Object.keys(BAR) as (keyof typeof BAR)[];
   return (
-    <div className="flex min-w-40 items-center gap-2">
-      <div className="flex h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
-        {order.map((s) =>
-          counts[s] ? (
-            <div
-              key={s}
-              title={`${STATUS_LABEL[s]}: ${counts[s]}`}
-              className={`${BAR[s]} border-r border-white last:border-r-0`}
-              style={{ width: `${(counts[s]! / total) * 100}%` }}
-            />
-          ) : null,
-        )}
+    <div className={cx("flex items-center gap-3", wide ? "w-full" : "w-40")}>
+      <div className="flex h-1.5 flex-1 gap-px overflow-hidden rounded-full bg-subtle">
+        {total > 0 &&
+          STATUS_ORDER.map((s) =>
+            counts[s] ? (
+              <div
+                key={s}
+                title={`${STATUS_LABEL[s]}: ${counts[s]}`}
+                className={cx(STATUS_TONE[s].bar, "first:rounded-l-full last:rounded-r-full")}
+                style={{ width: `${(counts[s]! / total) * 100}%` }}
+              />
+            ) : null,
+          )}
       </div>
-      <span className="whitespace-nowrap text-xs tabular-nums text-slate-500">
+      <span className="w-9 text-right text-xs tabular-nums text-muted">
         {done}/{total}
       </span>
+    </div>
+  );
+}
+
+export function StatusLegend({ counts }: { counts: EngagementSummary["task_counts"] }) {
+  return (
+    <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+      {STATUS_ORDER.filter((s) => counts[s]).map((s) => (
+        <span key={s} className="inline-flex items-center gap-1.5 text-xs text-muted">
+          <span className={cx("size-2 rounded-full", STATUS_TONE[s].bar)} />
+          {STATUS_LABEL[s]}
+          <span className="tabular-nums text-ink-2">{counts[s]}</span>
+        </span>
+      ))}
     </div>
   );
 }

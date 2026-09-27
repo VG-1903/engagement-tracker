@@ -1,20 +1,24 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
+import { ToastProvider } from "@/components/toast";
 import { AuthProvider } from "@/lib/auth";
 import "./globals.css";
 
 const geist = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
+const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Engagement Tracker",
+  title: "Ledgerline · Engagement Tracker",
   description: "Task & engagement management for CA / GST practices",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${geist.variable} h-full antialiased`}>
-      <body className="min-h-full bg-slate-50 font-sans text-slate-900">
-        <AuthProvider>{children}</AuthProvider>
+    <html lang="en" className={`${geist.variable} ${geistMono.variable} h-full`}>
+      <body className="min-h-full font-sans">
+        <AuthProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </AuthProvider>
       </body>
     </html>
   );

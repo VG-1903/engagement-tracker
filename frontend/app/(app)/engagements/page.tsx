@@ -1,33 +1,59 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { IconFolder, IconPlus, IconRepeat } from "@/components/icons";
 import { Progress } from "@/components/Progress";
-import { Button, Card, Empty, ErrorBanner, Field, Input, Modal, PageHeader, Select, Spinner } from "@/components/ui";
+import { useToast } from "@/components/toast";
+import {
+  Button,
+  Card,
+  EmptyState,
+  ErrorBanner,
+  Field,
+  Input,
+  Modal,
+  PageHeader,
+  Person,
+  Segmented,
+  Select,
+  SkeletonRows,
+  cx,
+} from "@/components/ui";
 import { ApiError, api, type Client, type EngagementSummary, type ServiceType, type User } from "@/lib/api";
 import { isManagerish, useAuth } from "@/lib/auth";
+import { fmtPeriod } from "@/lib/format";
+
+type Filter = "ACTIVE" | "COMPLETED" | "ALL";
 
 export default function EngagementsPage() {
   const { user } = useAuth();
+  const router = useRouter();
+  const [filter, setFilter] = useState<Filter>("ACTIVE");
   const [items, setItems] = useState<EngagementSummary[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
+  const query = useCallback(
+    (after?: string | null) =>
+      api.engagements({ limit: 25, status: filter === "ALL" ? undefined : filter, cursor: after ?? undefined }),
+    [filter],
+  );
+
   const load = useCallback(() => {
-    api
-      .engagements({ limit: 25 })
+    query()
       .then((p) => {
+        setError(null);
         setItems(p.items);
         setCursor(p.next_cursor);
       })
       .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
-  }, []);
+  }, [query]);
   useEffect(load, [load]);
 
   async function more() {
-    const p = await api.engagements({ limit: 25, cursor });
+    const p = await query(cursor);
     setItems((i) => [...(i ?? []), ...p.items]);
     setCursor(p.next_cursor);
   }
@@ -36,51 +62,71 @@ export default function EngagementsPage() {
     <>
       <PageHeader
         title="Engagements"
-        subtitle="Each engagement is one piece of client work, generated from a service's task templates."
-        actions={isManagerish(user) && <Button onClick={() => setCreating(true)}>New engagement</Button>}
+        subtitle="Each engagement is one piece of client work. Its tasks are created from the service's checklist."
+        actions={
+          isManagerish(user) && (
+            <Button onClick={() => setCreating(true)}>
+              <IconPlus /> New engagement
+            </Button>
+          )
+        }
       />
+
+      <div className="mb-4">
+        <Segmented
+          label="Filter engagements"
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: "ACTIVE", label: "Active" },
+            { value: "COMPLETED", label: "Completed" },
+            { value: "ALL", label: "All" },
+          ]}
+        />
+      </div>
+
       <ErrorBanner error={error} />
       <Card className="overflow-hidden">
         {items === null ? (
-          <Spinner />
+          <SkeletonRows />
         ) : items.length === 0 ? (
-          <Empty>No engagements yet.</Empty>
+          <EmptyState icon={<IconFolder />} title="No engagements here">
+            {isManagerish(user) ? "Create one to generate its tasks from a service checklist." : "You'll see engagements once you're assigned a task."}
+          </EmptyState>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-4 py-2.5">Client</th>
-                  <th className="px-4 py-2.5">Service</th>
-                  <th className="px-4 py-2.5">Period</th>
-                  <th className="px-4 py-2.5">Manager</th>
-                  <th className="px-4 py-2.5">Progress</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
-                {items.map((e) => (
-                  <tr key={e.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-2.5">
-                      <Link href={`/engagements/${e.id}`} className="font-medium text-slate-900 hover:text-indigo-700">
-                        {e.client.name}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2.5 text-slate-600">{e.service_type.name}</td>
-                    <td className="px-4 py-2.5 text-slate-600">{e.period_label ?? "One-time"}</td>
-                    <td className="px-4 py-2.5 text-slate-600">{e.manager.name}</td>
-                    <td className="px-4 py-2.5">
-                      <Progress counts={e.task_counts} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ul className="divide-y divide-line">
+            {items.map((e) => (
+              <li key={e.id}>
+                <button
+                  onClick={() => router.push(`/engagements/${e.id}`)}
+                  className="grid w-full grid-cols-1 items-center gap-x-6 gap-y-2 px-5 py-3.5 text-left transition-colors hover:bg-subtle/70 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_auto]"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate font-medium text-ink">{e.client.name}</div>
+                    <div className="mt-0.5 flex items-center gap-1.5 truncate text-[12.5px] text-muted">
+                      {e.service_type.is_recurring && <IconRepeat width={12} height={12} className="shrink-0 text-faint" />}
+                      {e.service_type.name}
+                    </div>
+                  </div>
+                  <div className="text-[13px]">
+                    <span className="text-ink-2">{fmtPeriod(e.period_label)}</span>
+                    {e.status === "COMPLETED" && (
+                      <span className="ml-2 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700">
+                        Done
+                      </span>
+                    )}
+                  </div>
+                  <Person user={e.manager} />
+                  <Progress counts={e.task_counts} />
+                </button>
+              </li>
+            ))}
+          </ul>
         )}
       </Card>
       {cursor && (
         <div className="mt-4 flex justify-center">
-          <Button variant="secondary" onClick={more}>
+          <Button variant="secondary" size="sm" onClick={more}>
             Load more
           </Button>
         </div>
@@ -93,11 +139,19 @@ export default function EngagementsPage() {
 function NewEngagement({ onClose }: { onClose: () => void }) {
   const { user } = useAuth();
   const router = useRouter();
+  const toast = useToast();
   const [clients, setClients] = useState<Client[]>([]);
   const [services, setServices] = useState<ServiceType[]>([]);
   const [people, setPeople] = useState<User[]>([]);
-  const [form, setForm] = useState({ client_id: "", service_type_id: "", period: "", start_date: "", manager_id: "", default_assignee_id: "" });
-  const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    client_id: "",
+    service_type_id: "",
+    period: "",
+    start_date: "",
+    manager_id: "",
+    default_assignee_id: "",
+  });
+  const [error, setError] = useState<{ message: string; existingId?: number } | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -107,7 +161,7 @@ function NewEngagement({ onClose }: { onClose: () => void }) {
         setServices(s);
         setPeople(u);
       })
-      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
+      .catch((e) => setError({ message: e instanceof ApiError ? e.message : String(e) }));
   }, []);
 
   const service = services.find((s) => String(s.id) === form.service_type_id);
@@ -119,107 +173,137 @@ function NewEngagement({ onClose }: { onClose: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      let period_start: string | undefined;
-      if (service?.is_recurring) {
-        // <input type="month"> gives YYYY-MM; quarterly/yearly accept a full date.
-        period_start = form.period.length === 7 ? `${form.period}-01` : form.period;
-      }
       const created = await api.createEngagement({
         client_id: Number(form.client_id),
         service_type_id: Number(form.service_type_id),
-        period_start,
+        // <input type="month"> yields YYYY-MM; quarterly/yearly use a full date
+        period_start: service?.is_recurring ? (form.period.length === 7 ? `${form.period}-01` : form.period) : undefined,
         start_date: !service?.is_recurring && form.start_date ? form.start_date : undefined,
         manager_id: form.manager_id ? Number(form.manager_id) : undefined,
         default_assignee_id: form.default_assignee_id ? Number(form.default_assignee_id) : undefined,
       });
+      toast(`Engagement created with ${created.tasks.length} tasks`);
       router.push(`/engagements/${created.id}`);
     } catch (err) {
       if (err instanceof ApiError && err.code === "DUPLICATE_ENGAGEMENT") {
-        const id = (err.details as { engagement_id?: number })?.engagement_id;
-        setError(`${err.message}${id ? ` (engagement #${id})` : ""}`);
-      } else setError(err instanceof ApiError ? err.message : String(err));
+        setError({ message: err.message, existingId: (err.details as { engagement_id?: number })?.engagement_id });
+      } else setError({ message: err instanceof ApiError ? err.message : String(err) });
       setBusy(false);
     }
   }
 
   return (
-    <Modal open title="New engagement" onClose={onClose}>
-      <form onSubmit={submit} className="space-y-4">
-        <ErrorBanner error={error} />
-        <Field label="Client">
-          <Select value={form.client_id} onChange={set("client_id")} required>
-            <option value="">Select a client…</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Service">
-          <Select value={form.service_type_id} onChange={set("service_type_id")} required>
-            <option value="">Select a service…</option>
-            {services.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name} {s.is_recurring ? `(${s.recurrence?.toLowerCase()})` : "(one-time)"}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        {service?.is_recurring &&
-          (service.recurrence === "MONTHLY" ? (
-            <Field label="Period" hint="The month the compliance work covers">
-              <Input type="month" value={form.period} onChange={set("period")} required />
-            </Field>
-          ) : (
-            <Field
-              label="Period start"
-              hint={service.recurrence === "QUARTERLY" ? "First day of the quarter (Apr/Jul/Oct/Jan 1)" : "Financial year start (1 April)"}
-            >
-              <Input type="date" value={form.period} onChange={set("period")} required />
-            </Field>
-          ))}
-        {service && !service.is_recurring && (
-          <Field label="Start date" hint="Task due dates are counted from this date (default today)">
-            <Input type="date" value={form.start_date} onChange={set("start_date")} />
-          </Field>
+    <Modal
+      open
+      title="New engagement"
+      description="Tasks are generated from the service's checklist when you create it."
+      onClose={onClose}
+    >
+      <form onSubmit={submit} className="space-y-4" id="new-engagement">
+        {error && (
+          <div className="space-y-1">
+            <ErrorBanner error={error.message} />
+            {error.existingId && (
+              <button
+                type="button"
+                onClick={() => router.push(`/engagements/${error.existingId}`)}
+                className="pl-1 text-[13px] font-medium text-ink underline decoration-line-strong underline-offset-2 hover:decoration-ink"
+              >
+                Open the existing engagement →
+              </button>
+            )}
+          </div>
         )}
-        {user?.role === "ADMIN" && (
-          <Field label="Manager">
-            <Select value={form.manager_id} onChange={set("manager_id")} required>
-              <option value="">Select a manager…</option>
-              {people
-                .filter((p) => p.role !== "MEMBER")
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Client" className="sm:col-span-2">
+            <Select value={form.client_id} onChange={set("client_id")} required>
+              <option value="">Select a client…</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
             </Select>
           </Field>
-        )}
-        <Field label="Assign all tasks to" hint="Optional; you can reassign individual tasks later">
-          <Select value={form.default_assignee_id} onChange={set("default_assignee_id")}>
-            <option value="">Leave unassigned</option>
-            {people.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} ({p.role.toLowerCase()})
-              </option>
+          <Field label="Service" className="sm:col-span-2">
+            <Select value={form.service_type_id} onChange={set("service_type_id")} required>
+              <option value="">Select a service…</option>
+              {services.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} · {s.is_recurring ? s.recurrence?.toLowerCase() : "one-time"}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          {service?.is_recurring &&
+            (service.recurrence === "MONTHLY" ? (
+              <Field label="Period" hint="The month this compliance work covers">
+                <Input type="month" value={form.period} onChange={set("period")} required />
+              </Field>
+            ) : (
+              <Field
+                label="Period start"
+                hint={service.recurrence === "QUARTERLY" ? "1 Apr, 1 Jul, 1 Oct or 1 Jan" : "1 April (financial year)"}
+              >
+                <Input type="date" value={form.period} onChange={set("period")} required />
+              </Field>
             ))}
-          </Select>
-        </Field>
+          {service && !service.is_recurring && (
+            <Field label="Start date" hint="Due dates count from here · defaults to today">
+              <Input type="date" value={form.start_date} onChange={set("start_date")} />
+            </Field>
+          )}
+
+          {user?.role === "ADMIN" && (
+            <Field label="Manager">
+              <Select value={form.manager_id} onChange={set("manager_id")} required>
+                <option value="">Select…</option>
+                {people
+                  .filter((p) => p.role !== "MEMBER")
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+              </Select>
+            </Field>
+          )}
+          <Field label="Assign tasks to" hint="Optional. You can reassign individual tasks later.">
+            <Select value={form.default_assignee_id} onChange={set("default_assignee_id")}>
+              <option value="">Leave unassigned</option>
+              {people.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+
         {service && (
-          <p className="text-xs text-slate-500">
-            Creates {service.templates.length} task{service.templates.length === 1 ? "" : "s"} from the “{service.name}”
-            templates.
-          </p>
+          <div className="rounded-lg border border-line bg-subtle/60 p-3">
+            <div className="mb-2 text-xs font-medium text-muted">
+              {service.templates.length} tasks will be created
+            </div>
+            <ol className="space-y-1">
+              {service.templates.map((t) => (
+                <li key={t.id} className="flex items-baseline gap-2 text-[13px] text-ink-2">
+                  <span className="w-4 text-right text-xs tabular-nums text-faint">{t.sequence}</span>
+                  <span className="flex-1">{t.title}</span>
+                  <span className="text-xs text-muted">+{t.default_due_offset_days}d</span>
+                </li>
+              ))}
+            </ol>
+          </div>
         )}
-        <div className="flex justify-end gap-2">
+
+        <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" disabled={busy}>
-            Create engagement
+          <Button type="submit" disabled={busy} className={cx(busy && "cursor-wait")}>
+            {busy ? "Creating…" : "Create engagement"}
           </Button>
         </div>
       </form>
