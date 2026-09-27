@@ -126,6 +126,10 @@ export class ApiError extends Error {
 
 const TOKEN_KEY = "et_token";
 
+/** Server's business date (from the x-business-date header); relative due labels use it, not the browser clock. */
+let businessDate: string | null = null;
+export const getBusinessDate = () => businessDate;
+
 export const tokenStore = {
   get(): string | null {
     try {
@@ -175,6 +179,7 @@ export async function request<T>(method: string, path: string, body?: unknown, q
   } catch {
     throw new ApiError(0, "NETWORK_ERROR", `Cannot reach the API at ${API_URL}.`);
   }
+  businessDate = res.headers.get("x-business-date") ?? businessDate;
   if (res.status === 204) return undefined as T;
   const data = await res.json().catch(() => null);
   if (!res.ok) {

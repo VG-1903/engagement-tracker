@@ -29,6 +29,9 @@ export default defineConfig({
   use: {
     baseURL: `http://localhost:${WEB_PORT}`,
     trace: "retain-on-failure",
+    // Browser deliberately in a different timezone from the API's business day (Asia/Kolkata):
+    // "Due today" labels must follow the server's date, not the viewer's clock.
+    timezoneId: "America/New_York",
     screenshot: "only-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1360, height: 900 } } }],

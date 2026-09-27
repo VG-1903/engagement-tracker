@@ -1,4 +1,4 @@
-import type { Action, TaskStatus } from "./api";
+import { getBusinessDate, type Action, type TaskStatus } from "./api";
 
 export const STATUS_LABEL: Record<TaskStatus, string> = {
   NOT_STARTED: "Not started",
@@ -96,6 +96,8 @@ export function fmtDateTime(iso: string): string {
 }
 
 export function todayIso(): string {
+  const server = getBusinessDate();
+  if (server) return server;
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }

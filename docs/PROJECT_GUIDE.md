@@ -218,7 +218,7 @@ backend/
   alembic/
     env.py             reads DATABASE_URL (or a URL injected by tests)
     versions/0001_initial_schema.py   the whole schema
-  tests/               conftest.py + 4 test modules (91 tests)
+  tests/               conftest.py + 4 test modules (92 tests)
   requirements.txt  requirements-dev.txt  pytest.ini  alembic.ini  .env.example
 
 frontend/
@@ -793,7 +793,7 @@ The frontend only holds **presentation** knowledge in `lib/format.ts`: labels, c
 
 ## 7. Testing strategy
 
-### 7.1 Backend: 91 pytest tests against real PostgreSQL
+### 7.1 Backend: 92 pytest tests against real PostgreSQL
 
 `backend/tests/conftest.py`:
 - It refuses to run unless the test database name ends in `_test`, so the tests can never wipe a real database.
@@ -809,7 +809,7 @@ Why real Postgres and not SQLite or mocks: the partial unique index, `ON CONFLIC
 | `tests/test_domain_units.py` | 49 | Pure unit tests with no DB. An **exhaustive 6×6 state × action matrix** (36 parametrised cases: every legal move gives the right state, every illegal one raises `InvalidTransition`); the set of legal edges equals the documented workflow and COMPLETED is terminal; member permissions; self-approval blocked for manager and admin; review rights (admin yes, other manager no, designated reviewer yes); notes required; `allowed_actions` output per role and state; period arithmetic (6 parametrised cases covering month, December rollover, February, FY quarters Q1 and Q4, FY year); alignment and catch-up |
 | `tests/test_workflow_rules.py` | 16 | Workflow through the HTTP API: permissions (403), invalid transitions (409 with details), unknown action (422), audit event contents, engagement auto-completion, self-approval, reviewer rules, stale version, a **true two-session race**, notes, full happy path with a client wait, completed tasks cannot be edited, unassigned tasks cannot start |
 | `tests/test_engagements.py` | 15 | Tasks generated from templates with the right due dates; duplicate prevention (API 409, and the raw DB insert blocked by the index); `generate-next` idempotency (201 then 200) with staffing carried forward; one-time services allow many engagements and have no next period; period alignment; creation permissions; **atomicity** (fault injected on the 2nd task) for create, generate-next and the batch job; batch catch-up and idempotency; role-scoped engagement visibility; members see only their own tasks inside a shared engagement; keyset pagination (no duplicates or gaps across 12 tasks at limit 5) and filters; invalid cursor |
-| `tests/test_auth_and_dashboard.py` | 11 | Login (case-insensitive email, no password hash in `/auth/me`), bad credentials, missing or garbage token and the exact error body, deactivated user locked out, admin-only endpoints, admin CRUD validation and conflicts (duplicate GSTIN, bad GSTIN, recurrence without recurring, duplicate email, self-lockout), client in use cannot be deleted, template edits don't change existing tasks, **dashboard bucket counts per role**, overdue and due-today filters, history includes assignment changes |
+| `tests/test_auth_and_dashboard.py` | 12 | Login (case-insensitive email, no password hash in `/auth/me`), bad credentials, missing or garbage token and the exact error body, deactivated user locked out, admin-only endpoints, admin CRUD validation and conflicts (duplicate GSTIN, bad GSTIN, recurrence without recurring, duplicate email, self-lockout), client in use cannot be deleted, template edits don't change existing tasks, **dashboard bucket counts per role**, overdue and due-today filters, history includes assignment changes |
 
 **The 7 required scenarios** (search for `required test` in the files):
 
@@ -1051,7 +1051,7 @@ Be ready to raise these yourself. It shows you understand the code deeply.
 6. **The request id only appears on the request log line.** Put it in a `contextvars` variable so every log line in the request carries it.
 7. **Audit table not protected at the DB level** (see question 22).
 8. **No ad-hoc tasks.** The schema supports tasks without a template (`template_id` NULL), but there is no endpoint to create one. A completed engagement also cannot be reopened.
-9. **Client-side date text uses the browser's timezone.** `is_overdue` comes from the server (IST), but the "Due today" or "In 3 days" text in `lib/format.ts` uses the browser's clock, so a user outside India could see slightly inconsistent wording near midnight.
+9. **Fixed during review: timezone mismatch in "Due today" labels.** Overdue and due-today come from the server's business date (IST), but the relative labels used the browser clock, so a viewer in another timezone could see "Tomorrow" on a task in the Due today bucket. CI caught this: its runners use UTC. The API now sends `x-business-date` on every response (`app/main.py`). `lib/api.ts` stores it and `todayIso()` in `lib/format.ts` uses it. The Playwright config runs the browser in `America/New_York` so a regression fails the suite.
 10. **Admin client list loads up to 100 clients and searches in the browser.** Fine for a small firm. For more, use the server's `q` parameter and keyset paging.
 11. **E2E setup:** CI now has an `e2e` job, and docker compose creates `engagement_e2e` on a fresh volume. Existing local volumes still need `createdb engagement_e2e` once.
 12. **Missing indexes for scale:** a partial index on open tasks, and a `(due_date, id)` index for the task list sort.

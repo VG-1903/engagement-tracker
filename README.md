@@ -4,7 +4,7 @@ A task and engagement management tool for a CA / GST practice. Managers open cli
 
 - **Backend:** FastAPI, SQLAlchemy 2.0, Alembic, Pydantic v2, PostgreSQL, JWT (bcrypt)
 - **Frontend:** Next.js 16 (App Router), TypeScript, Tailwind. The UI is branded "Ledgerline": warm-neutral design tokens, a task drawer with a workflow stepper and activity timeline, toasts, skeleton loaders, and tables that turn into cards on phones. Any task can be shared as a deep link: `/tasks?task=ID` opens its drawer
-- **Tests:** 91 pytest tests against a real PostgreSQL database, plus 25 Playwright end-to-end tests that drive the real UI and API
+- **Tests:** 92 pytest tests against a real PostgreSQL database, plus 25 Playwright end-to-end tests that drive the real UI and API
 - **Design note:** [docs/DESIGN.md](docs/DESIGN.md) ([PDF](docs/DESIGN.pdf)) covers architecture, ERD, workflow, recurring generation, scaling and trade-offs
 - **Project guide:** [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md) is a detailed walkthrough of the project
 
@@ -72,7 +72,7 @@ npm run dev
 
 ## Running tests
 
-There are two suites: **91 backend tests** (pytest) and **25 end-to-end tests** (Playwright).
+There are two suites: **92 backend tests** (pytest) and **25 end-to-end tests** (Playwright).
 
 ```bash
 make test                       # or: cd backend && .venv/Scripts/python -m pytest -v

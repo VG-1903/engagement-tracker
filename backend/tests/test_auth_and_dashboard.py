@@ -117,3 +117,8 @@ def test_overlong_password_is_a_validation_error_not_a_crash(api, world):
     assert r.status_code == 422
     r = api.post("/auth/login", json={"email": "alice@example.com", "password": "x" * 100})
     assert r.status_code == 401
+
+
+def test_business_date_header_matches_server_today(api, world):
+    r = api.get("/health")
+    assert r.headers["x-business-date"] == business_today().isoformat()

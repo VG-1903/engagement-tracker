@@ -5,7 +5,7 @@ import uuid
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import settings
+from app.config import business_today, settings
 from app.errors import register_exception_handlers
 from app.logging_setup import configure_logging
 from app.routers import auth, clients, dashboard, engagements, service_types, tasks, users
@@ -25,6 +25,7 @@ app.add_middleware(
     allow_credentials=False,  # bearer tokens, no cookies
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["x-business-date", "x-request-id"],
 )
 
 
@@ -34,6 +35,9 @@ async def request_log(request: Request, call_next):
     start = time.perf_counter()
     response = await call_next(request)
     response.headers["x-request-id"] = request_id
+    # The firm's "today" (Asia/Kolkata by default). The UI uses it for "due today / in 3 days" labels so
+    # they always agree with the server's overdue/due-today logic, whatever the viewer's timezone.
+    response.headers["x-business-date"] = business_today().isoformat()
     log.info("request", extra={"request_id": request_id, "method": request.method, "path": request.url.path,
                                "status": response.status_code,
                                "duration_ms": round((time.perf_counter() - start) * 1000, 1)})
