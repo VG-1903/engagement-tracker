@@ -10,8 +10,8 @@ A task and engagement management tool for a CA / GST practice. Managers open cli
 
 | | URL |
 |---|---|
-| Web app | _add Vercel URL after deploy_ |
-| API (OpenAPI docs at `/docs`) | _add Render URL after deploy_ |
+| Web app | https://engagement-tracker-sigma.vercel.app |
+| API (OpenAPI docs at `/docs`) | https://engagement-tracker-api.vercel.app |
 
 ## Demo logins (seed data)
 
@@ -111,9 +111,13 @@ Scheduler / CLI: `python -m app.cli generate-recurring --as-of 2026-10-01` is id
 
 ## Deployment
 
-1. **Database (Neon):** create a project and copy the connection string.
-2. **API (Render):** New → Blueprint → select this repo (it uses [render.yaml](render.yaml)). Set `DATABASE_URL` to the Neon URL and `CORS_ORIGINS` to the Vercel URL. Migrations run on start. Seed once from the Render shell: `python -m app.cli seed`.
-3. **Web (Vercel):** import the repo with root directory `frontend`, and set `NEXT_PUBLIC_API_URL` to the Render URL.
+The live deployment runs entirely on Vercel, with Neon Postgres added through the Vercel Marketplace:
+
+1. **API:** a Vercel project with root directory `backend`. Vercel's Python runtime serves the FastAPI app from [backend/index.py](backend/index.py). Set the environment variables `DATABASE_URL` (added automatically by the Neon integration), `JWT_SECRET`, `CORS_ORIGINS` (the web URL) and `BUSINESS_TIMEZONE`.
+2. **Database:** in the API project, run `vercel integration add neon`. Then run migrations and seed once from a machine with the repo, using the direct connection string: `DATABASE_URL=<DATABASE_URL_UNPOOLED> python -m alembic upgrade head && python -m app.cli seed`.
+3. **Web:** a Vercel project with root directory `frontend`, and `NEXT_PUBLIC_API_URL` set to the API URL.
+
+Alternatively, [render.yaml](render.yaml) deploys the API to Render as a long-running server, which also runs migrations on every start.
 
 ## Project layout
 

@@ -7,7 +7,7 @@ A task and engagement management tool for a CA / GST practice. Managers open **e
 ```
  Browser ──HTTPS──▶ Next.js (Vercel)            static client app, calls the API with a bearer token
     │
-    └──HTTPS/JSON──▶ FastAPI (Render)           routers → services → SQLAlchemy models
+    └──HTTPS/JSON──▶ FastAPI (Vercel)           routers → services → SQLAlchemy models
                           │
                           └──TLS──▶ PostgreSQL (Neon)   schema managed by Alembic
 ```
@@ -18,7 +18,7 @@ A task and engagement management tool for a CA / GST practice. Managers open **e
 | Backend | FastAPI, SQLAlchemy 2.0 (typed), Pydantic v2 | Python 3.13. Stateless, so it scales horizontally. |
 | Database | PostgreSQL 16 | The design depends on partial unique indexes, `ON CONFLICT`, CHECK constraints, JSONB and `COUNT(*) FILTER`. |
 | Auth | Email + password (bcrypt, cost 12), JWT HS256 access token (8h) | The role lives on the user row and is re-read from the DB on every request, so deactivating a user or changing their role takes effect immediately. |
-| Deployment | Vercel (web), Render (API, runs `alembic upgrade head` on start), Neon (Postgres) | GitHub Actions runs pytest against a Postgres service, lint and build for the web app, and the Playwright suite. |
+| Deployment | Vercel (web, plus the API on the Python runtime), Neon Postgres via the Vercel Marketplace; migrations applied with Alembic before release (a `render.yaml` is included as a long-running alternative) | GitHub Actions runs pytest against a Postgres service, lint and build for the web app, and the Playwright suite. |
 
 ## 2. Data model
 
@@ -167,5 +167,5 @@ Also covered: an exhaustive state × action matrix for the pure state machine; p
 ## 9. Trade-offs
 
 1. **Recurring schedule is inferred from the latest engagement instead of a `client_services` subscription table.** This is simpler and meets the brief, but you cannot stop a client's recurring service without an extra flag. A real product would add a subscription table (start/end period, default staffing), and the generator would read from it.
-2. **JWT in localStorage, stateless auth.** This is simple and works across Vercel and Render domains. The costs: XSS exposure of the token, and no server-side revocation beyond deactivating the user, which *is* enforced because the user row is re-read on every request. For production I would use short-lived access tokens with a rotating refresh token in an httpOnly cookie behind a same-site API domain.
+2. **JWT in localStorage, stateless auth.** This is simple and works across the separate web and API domains. The costs: XSS exposure of the token, and no server-side revocation beyond deactivating the user, which *is* enforced because the user row is re-read on every request. For production I would use short-lived access tokens with a rotating refresh token in an httpOnly cookie behind a same-site API domain.
 3. **Optimistic rather than pessimistic locking.** Conflicts are rare (one assignee per task), so versioning avoids holding row locks while a user thinks. The cost is that the client must handle 409 by reloading, which the task drawer does automatically.
