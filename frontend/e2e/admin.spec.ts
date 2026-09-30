@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { signIn } from "./helpers";
+import { API, signIn } from "./helpers";
 
 test.describe("admin (Asha)", () => {
   test("client CRUD with GSTIN validation and in-use protection", async ({ page, request }) => {
@@ -93,7 +93,7 @@ test.describe("admin (Asha)", () => {
     await expect(row.getByText("Deactivated")).toBeVisible();
 
     // the deactivated account can no longer sign in
-    const res = await request.post("http://localhost:8001/auth/login", {
+    const res = await request.post(`${API}/auth/login`, {
       data: { email: "rohan@example.com", password: "Welcome@123" },
     });
     expect(res.status()).toBe(401);

@@ -18,6 +18,10 @@ const py = JSON.stringify(
 
 export const API_URL = `http://localhost:${API_PORT}`;
 
+// Point at a deployment instead of local servers (the target database must be freshly seeded):
+//   E2E_BASE_URL=https://web.example E2E_API_URL=https://api.example npx playwright test
+const REMOTE = process.env.E2E_BASE_URL;
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
@@ -27,7 +31,7 @@ export default defineConfig({
   expect: { timeout: 8_000 },
   reporter: [["list"]],
   use: {
-    baseURL: `http://localhost:${WEB_PORT}`,
+    baseURL: REMOTE ?? `http://localhost:${WEB_PORT}`,
     trace: "retain-on-failure",
     // Browser deliberately in a different timezone from the API's business day (Asia/Kolkata):
     // "Due today" labels must follow the server's date, not the viewer's clock.
@@ -35,7 +39,7 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1360, height: 900 } } }],
-  webServer: [
+  webServer: REMOTE ? [] : [
     {
       command: `${py} -m alembic upgrade head && ${py} -m app.cli seed --reset && ${py} -m uvicorn app.main:app --port ${API_PORT}`,
       cwd: "../backend",

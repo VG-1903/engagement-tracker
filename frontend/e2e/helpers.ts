@@ -1,6 +1,7 @@
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
-export const API = "http://localhost:8001";
+// E2E_API_URL targets a deployed API (see playwright.config.ts); default is the local e2e server.
+export const API = process.env.E2E_API_URL ?? "http://localhost:8001";
 
 export const USERS = {
   admin: { email: "admin@example.com", password: "Admin@123", name: "Asha Admin" },

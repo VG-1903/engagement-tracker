@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { apiGet, findTask, openTask, signIn } from "./helpers";
+import { API, apiGet, findTask, openTask, signIn } from "./helpers";
 
 function monthPlus(n: number): string {
   const d = new Date();
@@ -27,9 +27,9 @@ test.describe("manager (Priya)", () => {
   test("request changes requires a note and sends the task back", async ({ page, request }) => {
     const t = await findTask(request, "priya", (x) => x.status === "IN_PROGRESS" && x.engagement.client_name.startsWith("Arora"));
     // Anita submits it first (through the API) so there is something to review
-    const anita = await (await request.post("http://localhost:8001/auth/login", { data: { email: "anita@example.com", password: "Member@123" } })).json();
+    const anita = await (await request.post(`${API}/auth/login`, { data: { email: "anita@example.com", password: "Member@123" } })).json();
     const cur = await apiGet<{ version: number }>(request, "anita", `/tasks/${t.id}`);
-    await request.post(`http://localhost:8001/tasks/${t.id}/transitions`, {
+    await request.post(`${API}/tasks/${t.id}/transitions`, {
       headers: { Authorization: `Bearer ${anita.access_token}` },
       data: { action: "SUBMIT_FOR_REVIEW", version: cur.version },
     });
